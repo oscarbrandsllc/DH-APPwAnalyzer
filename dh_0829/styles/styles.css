@@ -289,9 +289,9 @@
         /* Row 2 */
         .custom-select-wrapper {
             position: relative;
-            flex-grow: 1;
-            min-width: 120px;
-            max-width: 150px;
+            flex: 0 0 100px;
+            min-width: 90px;
+            max-width: 110px;
         }
         #leagueSelect {
             appearance: none;
@@ -1082,9 +1082,13 @@
                 flex-grow: 0; /* Prevents the filter group from expanding */
             }
 
-            .username-area, .custom-select-wrapper {
+            .username-area {
                 flex-grow: 0;
                 max-width: 220px;
+            }
+            .custom-select-wrapper {
+                flex: 0 0 100px;
+                max-width: 110px;
             }
         }
 

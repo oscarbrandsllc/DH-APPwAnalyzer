@@ -97,46 +97,7 @@
         }
 
 
-        /* Fix for browser autofill styles */
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus,
-        input:-webkit-autofill:active {
-            -webkit-box-shadow: 0 0 0 30px #0D0E1B inset !important; /* Match body bg */
-            -webkit-text-fill-color: #c4c8ea !important;
-            transition: background-color 5000s ease-in-out 0s;
-            caret-color: #c4c8ea;
-        }
-
-        #usernameInput, #leagueSelect {
-            background: linear-gradient(to bottom, rgba(0,0,0,0.01), rgba(0,0,0,0.1));
-            border: 1px solid var(--color-panel-border);
-            border-radius: 8px;
-            backdrop-filter: blur(4px) saturate(110%);
-            box-shadow: inset 0 1px 1px rgba(255,255,255,0.05);
-            color: #c4c8ea;
-            transition: all 0.2s ease;
-        }
-
-        #usernameInput:focus, #leagueSelect:focus {
-            outline: none;
-            border-color: var(--color-accent-primary);
-            box-shadow: 0 0 8px var(--color-accent-primary-glow);
-        }
-
-        #fetchDataButton {
-            border: 1px solid transparent;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            color: var(--color-text-primary);
-            text-shadow: 0 0 2px rgba(0,0,0,0.2);
-            border-color: #766DFF;
-            box-shadow: 0 0 8px var(--color-accent-primary-glow);
-        }
-        #fetchDataButton:hover {
-             box-shadow: 0 0 12px var(--color-accent-primary-glow);
-        }
+        /* Controls removed: username and league selectors handled by main app */
 
     </style>
 </head>
@@ -154,17 +115,6 @@
             <p class="text-md text-gray-400">KTC Team Value Analysis</p>
         </header>
 
-        <!-- Controls -->
-        <div class="glass-panel py-1 px-2 flex flex-col md:flex-row items-center justify-center gap-1">
-            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="px-3 py-1 text-sm w-full md:w-auto">
-            <div id="leagueSelectWrapper" class="hidden w-full md:w-auto">
-                <select id="leagueSelect" class="px-3 py-1 text-sm w-full md:w-auto appearance-none">
-                    <option>Select a league...</option>
-                </select>
-            </div>
-            <button id="fetchDataButton" class="bg-purple-600/50 hover:bg-purple-700/50 text-white font-bold text-sm py-1 px-3 w-full md:w-auto">Analyze League</button>
-        </div>
-        
         <!-- Summary Stats -->
         <section id="summaryStats" class="hidden grid grid-cols-4 lg:grid-cols-8 gap-1 md:gap-4 text-center my-2 md:my-0">
             <!-- Summary boxes injected here -->
@@ -212,12 +162,9 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
 
             // --- DOM Elements ---
-            const usernameInput = document.getElementById('usernameInput');
-            const leagueSelect = document.getElementById('leagueSelect');
-            const fetchDataButton = document.getElementById('fetchDataButton');
             const loadingIndicator = document.getElementById('loading');
             const infographicContent = document.getElementById('infographicContent');
             const starterRankingsGrid = document.getElementById('starterRankingsGrid');
@@ -250,45 +197,25 @@
             };
 
 
-            // --- Event Listeners ---
-            fetchDataButton.addEventListener('click', handleFetchData);
-            leagueSelect.addEventListener('change', () => {
-                if (leagueSelect.value) {
-                    analyzeLeague(leagueSelect.value);
-                }
-            });
+            // --- Initialization ---
+            const params = new URLSearchParams(window.location.search);
+            const username = params.get('username');
+            const leagueId = params.get('league');
+            if (!username || !leagueId) {
+                alert('Missing username or league information.');
+                return;
+            }
 
-            async function handleFetchData() {
-                const username = usernameInput.value.trim();
-                if (!username) {
-                    alert('Please enter a Sleeper username.');
-                    return;
-                }
-
-                setLoading(true);
-                infographicContent.classList.add('hidden');
-                summaryStats.classList.add('hidden');
-
-                try {
-                    // Fetch all initial data concurrently
-                    await Promise.all([
-                        fetchSleeperPlayers(),
-                        fetchKTCData()
-                    ]);
-                    
-                    await fetchUserAndLeagues(username);
-
-                    if (state.leagues.length > 0) {
-                        // Auto-select and analyze the first league
-                        leagueSelect.selectedIndex = 1;
-                        await analyzeLeague(state.leagues[0].league_id);
-                    }
-                } catch (error) {
-                    console.error('Error fetching data:', error);
-                    alert(`An error occurred: ${error.message}`);
-                } finally {
-                    setLoading(false);
-                }
+            setLoading(true);
+            try {
+                await Promise.all([fetchSleeperPlayers(), fetchKTCData()]);
+                await fetchUserAndLeagues(username);
+                await analyzeLeague(leagueId);
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                alert(`An error occurred: ${error.message}`);
+            } finally {
+                setLoading(false);
             }
 
             // --- Data Fetching ---
@@ -357,8 +284,6 @@
                 const leagues = await fetchWithCache(`https://api.sleeper.app/v1/user/${state.userId}/leagues/nfl/${new Date().getFullYear()}`);
                 if (!leagues || leagues.length === 0) throw new Error('No active leagues found for this user in the current season.');
                 state.leagues = leagues.sort((a,b) => a.name.localeCompare(b.name));
-
-                populateLeagueSelect(state.leagues);
             }
 
             async function analyzeLeague(leagueId) {
@@ -858,27 +783,11 @@
             }
 
             // --- UI Helpers ---
-            function populateLeagueSelect(leagues) {
-                leagueSelect.innerHTML = '<option value="">Select a league...</option>';
-                leagues.forEach(league => {
-                    const option = document.createElement('option');
-                    option.value = league.league_id;
-                    option.textContent = league.name;
-                    leagueSelect.appendChild(option);
-                });
-                document.getElementById('leagueSelectWrapper').classList.remove('hidden');
-                leagueSelect.disabled = false;
-            }
-
             function setLoading(isLoading) {
                 if (isLoading) {
                     loadingIndicator.classList.remove('hidden');
-                    fetchDataButton.disabled = true;
-                    fetchDataButton.textContent = 'Loading...';
                 } else {
                     loadingIndicator.classList.add('hidden');
-                    fetchDataButton.disabled = false;
-                    fetchDataButton.textContent = 'Analyze League';
                 }
             }
         });
