@@ -21,6 +21,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const clearCompareButton = document.getElementById('clearCompareButton');
         const positionalViewBtn = document.getElementById('positionalViewBtn');
         const depthChartViewBtn = document.getElementById('depthChartViewBtn');
+        const analyzeLeagueBtn = document.getElementById('analyzeLeagueBtn');
         const viewControls = document.getElementById('view-controls');
         const positionalFiltersContainer = document.getElementById('positional-filters');
         const tradeSimulator = document.getElementById('tradeSimulator');
@@ -32,6 +33,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const dropdownMenu = document.getElementById('dropdown-menu');
         const menuRosters = document.getElementById('menu-rosters');
         const menuOwnership = document.getElementById('menu-ownership');
+        const menuAnalyzer = document.getElementById('menu-analyzer');
 
         menuButton?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -63,6 +65,15 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
             } else {
                 handleFetchOwnership();
             }
+            dropdownMenu.classList.add('hidden');
+        });
+
+        menuAnalyzer?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const leagueId = state.currentLeagueId || leagueSelect?.value;
+            if (!username || !leagueId) return;
+            const base = pageType === 'welcome' ? '' : '../';
+            window.location.href = `${base}analyzer/analyzer.html?username=${encodeURIComponent(username)}&leagueId=${leagueId}`;
             dropdownMenu.classList.add('hidden');
         });
 
@@ -128,6 +139,12 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         clearCompareButton?.addEventListener('click', () => handleClearCompare(true));
         positionalViewBtn?.addEventListener('click', () => setRosterView('positional'));
         depthChartViewBtn?.addEventListener('click', () => setRosterView('depth'));
+        analyzeLeagueBtn?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            if (!username || !state.currentLeagueId) return;
+            const base = pageType === 'welcome' ? '' : '../';
+            window.location.href = `${base}analyzer/analyzer.html?username=${encodeURIComponent(username)}&leagueId=${state.currentLeagueId}`;
+        });
         positionalFiltersContainer?.addEventListener('click', handlePositionFilter);
         
         // --- Initialization ---
@@ -1211,7 +1228,7 @@ if ('serviceWorker' in navigator) {
 
 
 // Hide legend when switching away from Welcome via UI controls
-['rostersButton','ownershipButton','previewButton','leagueSelect','positionalViewBtn','depthChartViewBtn'].forEach(id=>{
+['rostersButton','ownershipButton','previewButton','leagueSelect','positionalViewBtn','depthChartViewBtn','analyzeLeagueBtn'].forEach(id=>{
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', hideLegend, {capture:true});
 });

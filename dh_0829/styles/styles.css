@@ -291,7 +291,7 @@
             position: relative;
             flex-grow: 1;
             min-width: 120px;
-            max-width: 150px;
+            max-width: 130px;
         }
         #leagueSelect {
             appearance: none;
@@ -333,6 +333,13 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+        }
+        .right-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-left: auto;
+            flex-shrink: 0;
         }
         #positional-filters {
             /* This will no longer grow, allowing the parent to center it */
@@ -1084,7 +1091,7 @@
 
             .username-area, .custom-select-wrapper {
                 flex-grow: 0;
-                max-width: 220px;
+                max-width: 200px;
             }
         }
 
