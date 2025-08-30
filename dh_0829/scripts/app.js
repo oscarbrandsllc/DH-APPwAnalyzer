@@ -138,7 +138,16 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         }
 
            leagueSelect?.addEventListener('change', (e) => {
-          handleLeagueSelect(e);
+          if (pageType === 'analyzer') {
+              const newLeagueId = e.target.value;
+              if (newLeagueId) {
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('leagueId', newLeagueId);
+                  window.location.search = params.toString();
+              }
+          } else {
+              handleLeagueSelect(e);
+          }
           if (e && e.target && e.target.blur) e.target.blur();
         });
         rosterGrid?.addEventListener('click', handleTeamSelect);
