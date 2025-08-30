@@ -32,6 +32,8 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const dropdownMenu = document.getElementById('dropdown-menu');
         const menuRosters = document.getElementById('menu-rosters');
         const menuOwnership = document.getElementById('menu-ownership');
+        const menuAnalyzer = document.getElementById('menu-analyzer');
+        const analyzeLeagueButton = document.getElementById('analyzeLeagueButton');
 
         menuButton?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -55,15 +57,21 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
             dropdownMenu.classList.add('hidden');
         });
 
-        menuOwnership?.addEventListener('click', () => {
-            if (pageType === 'welcome') {
-                const username = usernameInput.value.trim();
-                if (!username) return;
-                window.location.href = `ownership/ownership.html?username=${encodeURIComponent(username)}`;
-            } else {
-                handleFetchOwnership();
+        menuAnalyzer?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            if (!username) return;
+            let url = pageType === 'welcome' ? `analyzer/analyzer.html?username=${encodeURIComponent(username)}` : `../analyzer/analyzer.html?username=${encodeURIComponent(username)}`;
+            if (state.currentLeagueId) {
+                url += `&leagueId=${state.currentLeagueId}`;
             }
+            window.location.href = url;
             dropdownMenu.classList.add('hidden');
+        });
+
+        analyzeLeagueButton?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            if (!username || !state.currentLeagueId) return;
+            window.location.href = `../analyzer/analyzer.html?username=${encodeURIComponent(username)}&leagueId=${state.currentLeagueId}`;
         });
 
         // --- State ---
