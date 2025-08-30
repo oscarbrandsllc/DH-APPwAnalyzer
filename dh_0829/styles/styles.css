@@ -290,8 +290,8 @@
         .custom-select-wrapper {
             position: relative;
             flex-grow: 1;
-            min-width: 120px;
-            max-width: 150px;
+            min-width: 110px;
+            max-width: 120px;
         }
         #leagueSelect {
             appearance: none;
@@ -1084,7 +1084,7 @@
 
             .username-area, .custom-select-wrapper {
                 flex-grow: 0;
-                max-width: 220px;
+                max-width: 200px;
             }
         }
 
