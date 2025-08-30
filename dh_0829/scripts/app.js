@@ -164,6 +164,8 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
                     await handleFetchRosters();
                 } else if (pageType === 'ownership') {
                     await handleFetchOwnership();
+                } else if (pageType === 'analyzer') {
+                    await handleFetchAnalyzerData();
                 }
             }
         });
@@ -1137,7 +1139,472 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
             state.cache[url] = data;
             return data;
         }
-    
+
+        // --- Analyzer Functions ---
+        async function handleFetchAnalyzerData() {
+            const params = new URLSearchParams(window.location.search);
+            const username = params.get('username');
+            const leagueId = params.get('leagueId');
+
+            if (!username) {
+                alert('Please provide a username in the URL.');
+                return;
+            }
+
+            setLoading(true, 'Analyzing league data...');
+
+            try {
+                await fetchAndSetUser(username);
+                const leagues = await fetchUserLeagues(state.userId);
+                state.leagues = leagues.sort((a, b) => a.name.localeCompare(b.name));
+
+                populateLeagueSelect(state.leagues);
+                contextualControls.classList.remove('hidden');
+
+                // Hide controls not used on analyzer page
+                document.getElementById('positionalViewBtn')?.classList.add('hidden');
+                document.getElementById('depthChartViewBtn')?.classList.add('hidden');
+                document.getElementById('analyzeLeagueButton')?.classList.add('hidden');
+                document.getElementById('positional-filters')?.classList.add('hidden');
+                document.getElementById('compare-controls')?.classList.add('hidden');
+
+                if (state.leagues.length > 0) {
+                    let targetLeagueId = leagueId;
+                    if (!targetLeagueId) {
+                        targetLeagueId = state.leagues[0].league_id;
+                    }
+                    const leagueExists = state.leagues.some(l => l.league_id === targetLeagueId);
+                    if (leagueExists) {
+                        leagueSelect.value = targetLeagueId;
+                        await analyzeLeague(targetLeagueId);
+                    } else {
+                        alert('The specified league was not found for this user.');
+                    }
+                }
+            } catch (error) {
+                handleError(error, username);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function analyzeLeague(leagueId) {
+            setLoading(true, `Analyzing league ${leagueId}...`);
+            const infographicContent = document.getElementById('infographicContent');
+            infographicContent.classList.add('hidden');
+
+            state.currentLeagueId = leagueId;
+
+            const leagueInfo = state.leagues.find(l => l.league_id === leagueId);
+            const rosterPositions = leagueInfo.roster_positions;
+            const superflexSlots = rosterPositions.filter(p => p === 'SUPER_FLEX').length;
+            const qbSlots = rosterPositions.filter(p => p === 'QB').length;
+            state.isSuperflex = (superflexSlots > 0) || (qbSlots > 1);
+
+            const [rosters, users, tradedPicks] = await Promise.all([
+                fetchWithCache(`${API_BASE}/league/${leagueId}/rosters`),
+                fetchWithCache(`${API_BASE}/league/${leagueId}/users`),
+                fetchWithCache(`${API_BASE}/league/${leagueId}/traded_picks`),
+            ]);
+
+            const teams = processLeagueDataForAnalyzer(rosters, users, tradedPicks, leagueInfo);
+
+            infographicContent.classList.remove('hidden');
+
+            renderSummaryStats(teams);
+            renderCharts(teams);
+            renderRadarChart(teams);
+            renderStarterGrid(teams, leagueInfo);
+
+            setLoading(false);
+        }
+
+        function processLeagueDataForAnalyzer(rosters, users, tradedPicks, leagueInfo) {
+            const userMap = users.reduce((acc, user) => ({ ...acc, [user.user_id]: user }), {});
+
+            return rosters.map(roster => {
+                const owner = userMap[roster.owner_id];
+                const teamName = owner?.display_name || `Team ${roster.roster_id}`;
+
+                let topPlayer = { name: 'N/A', ktc: 0 };
+                const allPlayers = (roster.players || []).map(pId => {
+                    const playerInfo = state.players[pId];
+                    const ktc = getKtcValue(pId);
+                    if (ktc > topPlayer.ktc) {
+                        topPlayer = { name: (playerInfo && playerInfo.first_name) ? `${playerInfo.first_name[0]}. ${playerInfo.last_name}` : 'Unknown', ktc };
+                    }
+                    return { id: pId, pos: playerInfo?.position, ktc };
+                }).sort((a,b) => b.ktc - a.ktc);
+
+                const overallPositional = { QB: 0, RB: 0, WR: 0, TE: 0, Picks: 0 };
+                allPlayers.forEach(p => {
+                    if (overallPositional.hasOwnProperty(p.pos)) {
+                        overallPositional[p.pos] += p.ktc;
+                    }
+                });
+
+                getOwnedPicks(roster.roster_id, tradedPicks, leagueInfo).forEach(p => {
+                    overallPositional.Picks += getKtcValue(p.label);
+                });
+
+                const startersPositional = { QB: 0, RB: 0, WR: 0, TE: 0, FLEX: 0, 'SUPER_FLEX': 0 };
+                const startersPlayerDetails = { QB: [], RB: [], WR: [], TE: [], FLEX: [], 'SUPER_FLEX': [] };
+                const startersValueByPosition = { QB: 0, RB: 0, WR: 0, TE: 0 };
+                const starterIds = roster.starters || [];
+                const rosterPositions = leagueInfo.roster_positions;
+                starterIds.forEach((pId, index) => {
+                    const slot = rosterPositions[index];
+                    const playerInfo = state.players[pId];
+                    const ktc = getKtcValue(pId);
+
+                    if (startersPositional.hasOwnProperty(slot)) {
+                        startersPositional[slot] += ktc;
+                        startersPlayerDetails[slot].push({
+                            name: (playerInfo && playerInfo.first_name) ? `${playerInfo.first_name[0]}. ${playerInfo.last_name}` : 'Unknown',
+                            ktc: ktc
+                        });
+                    }
+
+                    if (playerInfo && startersValueByPosition.hasOwnProperty(playerInfo.position)) {
+                        startersValueByPosition[playerInfo.position] += ktc;
+                    }
+                });
+
+                const totalValue = Object.values(overallPositional).reduce((a, b) => a + b, 0);
+
+                return {
+                    teamName,
+                    totalValue,
+                    startersValue: Object.values(startersPositional).reduce((a,b) => a+b, 0),
+                    overallPositional,
+                    startersPositional,
+                    startersPlayerDetails,
+                    startersValueByPosition,
+                    roster,
+                    topPlayer,
+                    allPlayers,
+                    isUserTeam: roster.owner_id === state.userId
+                };
+            }).sort((a,b) => b.totalValue - a.totalValue);
+        }
+
+        function renderSummaryStats(teams) {
+            const summaryStats = document.getElementById('summaryStats');
+            const userTeam = teams.find(t => t.isUserTeam);
+            if (!userTeam) {
+                summaryStats.classList.add('hidden');
+                return;
+            }
+
+            const sortedByStarters = [...teams].sort((a, b) => b.startersValue - a.startersValue);
+
+            const totalRank = sortedByStarters.findIndex(t => t.isUserTeam) + 1;
+            const starterRank = sortedByStarters.findIndex(t => t.isUserTeam) + 1;
+
+            const positionsToRank = ['QB', 'RB', 'WR', 'TE'];
+            const positionalRanks = {};
+            positionsToRank.forEach(pos => {
+                const sorted = [...teams].sort((a,b) => b.startersValueByPosition[pos] - a.startersValueByPosition[pos]);
+                positionalRanks[pos] = sorted.findIndex(t => t.isUserTeam) + 1;
+            });
+
+            summaryStats.innerHTML = `
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">Overall Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(totalRank, teams.length)}">${totalRank}/${teams.length}</p>
+                </div>
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">Starters KTC</p>
+                    <p class="text-lg font-bold">${userTeam.startersValue.toLocaleString()}</p>
+                </div>
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">Starters Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(starterRank, teams.length)}">${starterRank}/${teams.length}</p>
+                </div>
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">Top Player</p>
+                    <p class="text-sm font-bold truncate">${userTeam.topPlayer.name}</p>
+                    <p class="text-[10px] text-purple-400">${userTeam.topPlayer.ktc.toLocaleString()}</p>
+                </div>
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">QB Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(positionalRanks.QB, teams.length)}">${positionalRanks.QB}/${teams.length}</p>
+                </div>
+                <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">RB Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(positionalRanks.RB, teams.length)}">${positionalRanks.RB}/${teams.length}</p>
+                </div>
+                 <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">WR Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(positionalRanks.WR, teams.length)}">${positionalRanks.WR}/${teams.length}</p>
+                </div>
+                 <div class="glass-panel p-1 rounded-lg">
+                    <p class="text-[10px] text-gray-400">TE Rank</p>
+                    <p class="text-lg font-bold" style="color: ${getRankColor(positionalRanks.TE, teams.length)}">${positionalRanks.TE}/${teams.length}</p>
+                </div>
+            `;
+            summaryStats.classList.remove('hidden');
+        }
+
+        function renderCharts(teams) {
+            const POS_COLORS = { QB: 'rgba(255, 58, 117, 0.8)', RB: 'rgba(0, 235, 199, 0.8)', WR: 'rgba(88, 167, 255, 0.8)', TE: 'rgba(180, 105, 255, 0.8)', FLEX: 'rgba(255, 127, 80, 0.8)', SUPER_FLEX: 'rgba(220, 220, 220, 0.8)', Picks: 'rgba(255, 199, 0, 0.8)' };
+            const labels = teams.map(t => {
+                const name = t.teamName;
+                return name.length > 11 ? name.substring(0, 11) + '…' : name;
+            });
+
+            const overallDatasets = Object.keys(teams[0].overallPositional).map(pos => ({
+                label: pos,
+                data: teams.map(t => t.overallPositional[pos]),
+                backgroundColor: POS_COLORS[pos]
+            }));
+            const overallValueChart = new Chart(document.getElementById('overallValueChart'), {
+                type: 'bar',
+                data: { labels, datasets: overallDatasets },
+                options: chartOptions(null, Math.max(...teams.map(t => t.totalValue)))
+            });
+
+            const sortedStarters = [...teams].sort((a, b) => b.startersValue - a.startersValue);
+            const startersDatasets = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'].map(pos => ({
+                label: pos,
+                data: sortedStarters.map(t => t.startersPositional[pos]),
+                backgroundColor: POS_COLORS[pos]
+            }));
+
+            const startersValueChart = new Chart(document.getElementById('startersValueChart'), {
+                type: 'bar',
+                data: {
+                    labels: sortedStarters.map(t => {
+                        const name = t.teamName;
+                        return name.length > 11 ? name.substring(0, 11) + '…' : name;
+                    }),
+                    datasets: startersDatasets
+                },
+                options: chartOptions(sortedStarters, Math.max(...sortedStarters.map(t => t.startersValue)))
+            });
+        }
+
+        function renderRadarChart(teams) {
+            const userTeam = teams.find(t => t.isUserTeam);
+            if (!userTeam) return;
+
+            const leagueAverages = { QB: 0, RB: 0, WR: 0, TE: 0 };
+            const userValues = { QB: 0, RB: 0, WR: 0, TE: 0 };
+            const positions = ['QB', 'RB', 'WR', 'TE'];
+
+            positions.forEach(pos => {
+                let totalLeagueKTC = 0;
+                teams.forEach(team => {
+                    const topTwoPlayers = team.allPlayers.filter(p => p.pos === pos).slice(0, 2);
+                    totalLeagueKTC += topTwoPlayers.reduce((sum, player) => sum + player.ktc, 0);
+                });
+                leagueAverages[pos] = totalLeagueKTC / teams.length;
+
+                const userTopTwo = userTeam.allPlayers.filter(p => p.pos === pos).slice(0, 2);
+                userValues[pos] = userTopTwo.reduce((sum, player) => sum + player.ktc, 0);
+            });
+
+            const radarChart = new Chart(document.getElementById('radarChart'), {
+                type: 'radar',
+                data: {
+                    labels: positions,
+                    datasets: [
+                        {
+                            label: 'Your Team (Top 2)',
+                            data: Object.values(userValues),
+                            fill: true,
+                            backgroundColor: 'rgba(118, 109, 255, 0.4)',
+                            borderColor: 'rgba(118, 109, 255, 1)',
+                            pointBackgroundColor: 'rgba(118, 109, 255, 1)',
+                            pointBorderColor: '#fff',
+                        },
+                        {
+                            label: 'League Average (Top 2)',
+                            data: Object.values(leagueAverages),
+                            fill: true,
+                            backgroundColor: 'rgba(66, 194, 255, 0.4)',
+                            borderColor: 'rgba(66, 194, 255, 1)',
+                            pointBackgroundColor: 'rgba(66, 194, 255, 1)',
+                            pointBorderColor: '#fff',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    elements: { line: { borderWidth: 3 } },
+                    scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.2)' }, grid: { color: 'rgba(255, 255, 255, 0.2)' }, pointLabels: { font: { size: 14, family: "'Orbitron', sans-serif" }, color: '#EAEBF0' }, ticks: { color: '#EAEBF0', backdropColor: 'rgba(0,0,0,0.5)', font: { family: "'Roboto', sans-serif" } } } },
+                    plugins: { legend: { position: 'top', labels: { color: '#EAEBF0', font: { family: "'Roboto', sans-serif" } } } }
+                }
+            });
+        }
+
+        function renderStarterGrid(teams, leagueInfo) {
+            const starterRankingsGrid = document.getElementById('starterRankingsGrid');
+            starterRankingsGrid.innerHTML = '';
+
+            const starterPositions = {};
+            leagueInfo.roster_positions.forEach(pos => {
+                if (['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPER_FLEX'].includes(pos)) {
+                    starterPositions[pos] = (starterPositions[pos] || 0) + 1;
+                }
+            });
+
+            Object.entries(starterPositions).forEach(([slotPosition, count]) => {
+                for (let i = 0; i < count; i++) {
+                    const slotIndex = i + 1;
+                    const slotData = [];
+
+                    teams.forEach(team => {
+                        const starters = team.roster.starters || [];
+                        const positions = leagueInfo.roster_positions;
+                        let playerFound = false;
+                        let currentSlotCount = 0;
+
+                        for (let j = 0; j < starters.length; j++) {
+                            if (positions[j] === slotPosition) {
+                                currentSlotCount++;
+                                if (currentSlotCount === slotIndex) {
+                                    const playerId = starters[j];
+                                    const playerInfo = state.players[playerId];
+                                    const ktcValue = getKtcValue(playerId);
+                                    slotData.push({
+                                        teamName: team.teamName,
+                                        playerName: (playerInfo && playerInfo.first_name) ? `${playerInfo.first_name} ${playerInfo.last_name}` : 'Empty Slot',
+                                        ktcValue: ktcValue,
+                                    });
+                                    playerFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                         if (!playerFound) {
+                            slotData.push({ teamName: team.teamName, playerName: 'Empty Slot', ktcValue: 0 });
+                        }
+                    });
+
+                    slotData.sort((a, b) => b.ktcValue - a.ktcValue);
+
+                    const gridItem = document.createElement('div');
+                    gridItem.className = 'glass-panel p-3';
+
+                    let content = `<h3 class="text-lg font-bold text-center mb-2">${slotPosition.replace('_', ' ')} ${slotIndex}</h3><ul>`;
+                    slotData.forEach((data, index) => {
+                        const rank = index + 1;
+                        const color = getRankColor(rank, teams.length);
+                        content += `
+                            <li class="flex justify-between items-center text-xs py-0.5 border-b border-gray-800/50 gap-2">
+                                <div class="flex items-center gap-2 w-3/5 min-w-0">
+                                    <span class="font-bold w-6 flex-shrink-0" style="color: ${color};">${rank}.</span>
+                                    <span class="truncate">${data.teamName}</span>
+                                </div>
+                                <div class="text-right flex-shrink-0 w-2/5">
+                                    <span class="font-semibold" style="color: ${color};">${data.ktcValue.toLocaleString()}</span>
+                                    <p class="text-xs text-gray-500 truncate">${data.playerName}</p>
+                                </div>
+                            </li>
+                        `;
+                    });
+                    content += '</ul>';
+                    gridItem.innerHTML = content;
+                    starterRankingsGrid.appendChild(gridItem);
+                }
+            });
+        }
+
+        function chartOptions(teamsDataForTooltip = null, maxKtc = 0) {
+            const tooltipOptions = {
+                 backgroundColor: 'rgba(13, 14, 27, 0.9)',
+                 titleFont: { family: "'Orbitron', sans-serif", size: 16 },
+                 bodyFont: { family: "'Roboto', sans-serif", size: 12 },
+                 footerFont: { family: "'Roboto', sans-serif", weight: 'bold' },
+                 borderColor: 'rgba(118, 109, 255, 0.5)',
+                 borderWidth: 1,
+                 padding: 10,
+                 callbacks: {}
+            };
+
+            if (teamsDataForTooltip) {
+                tooltipOptions.callbacks.footer = (tooltipItems) => {
+                    const teamIndex = tooltipItems[0].dataIndex;
+                    const positionLabel = tooltipItems[0].dataset.label;
+                    const teamData = teamsDataForTooltip[teamIndex];
+
+                    if (teamData && teamData.startersPlayerDetails && teamData.startersPlayerDetails[positionLabel]) {
+                        const players = teamData.startersPlayerDetails[positionLabel];
+                        return players
+                            .sort((a, b) => b.ktc - a.ktc)
+                            .slice(0, 3)
+                            .map(p => `${p.name}: ${p.ktc.toLocaleString()}`)
+                            .join('\n');
+                    }
+                    return '';
+                };
+            }
+
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                layout: {
+                    padding: {
+                        left: 0,
+                        right: 5
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        ticks: {
+                            color: '#EAEBF0',
+                            font: {
+                                family: "'Roboto', sans-serif"
+                             },
+                             maxRotation: 45,
+                             minRotation: 45,
+                        },
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        max: Math.ceil(maxKtc / 10000) * 10000,
+                    },
+                    y: {
+                        stacked: true,
+                        ticks: {
+                            color: '#EAEBF0',
+                            font: {
+                                family: "'Roboto', sans-serif",
+                                size: 10
+                             },
+                             callback: function(value, index, values) {
+                                const label = this.getLabelForValue(value);
+                                return label;
+                            }
+                        },
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#EAEBF0', font: { family: "'Roboto', sans-serif" } }
+                    },
+                    tooltip: tooltipOptions
+                }
+            };
+        }
+
+        function getKtcValue(id) {
+            const ktcSource = state.isSuperflex ? state.sflxData : state.oneQbData;
+            return ktcSource[id]?.ktc || 0;
+        }
+
+        function getRankColor(rank, total) {
+            const percentile = (total - rank + 1) / total;
+            if (percentile >= 0.8) return '#00EBC7'; // Top 20%
+            if (percentile >= 0.6) return '#58A7FF';
+            if (percentile >= 0.4) return '#EAEBF0';
+            if (percentile >= 0.2) return '#FF7F50';
+            return '#FF3A75'; // Bottom 20%
+        }
 
 
 (function(){
