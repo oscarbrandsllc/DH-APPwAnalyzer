@@ -289,9 +289,9 @@
         /* Row 2 */
         .custom-select-wrapper {
             position: relative;
-            flex-grow: 1;
-            min-width: 120px;
-            max-width: 150px;
+            flex-grow: 0;
+            min-width: 100px;
+            max-width: 110px;
         }
         #leagueSelect {
             appearance: none;
@@ -446,6 +446,9 @@
             transition: all 0.2s ease;
             white-space: nowrap;
             color: var(--color-text-secondary);
+        }
+        #analyzeLeagueBtn {
+            flex-shrink: 0;
         }
         .control-button.glow-on-select {
             box-shadow: 0 0 8px #7300ff;
@@ -1082,9 +1085,13 @@
                 flex-grow: 0; /* Prevents the filter group from expanding */
             }
 
-            .username-area, .custom-select-wrapper {
+            .username-area {
                 flex-grow: 0;
-                max-width: 220px;
+                max-width: 200px;
+            }
+            .custom-select-wrapper {
+                flex-grow: 0;
+                max-width: 110px;
             }
         }
 
