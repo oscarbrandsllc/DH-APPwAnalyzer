@@ -21,6 +21,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const clearCompareButton = document.getElementById('clearCompareButton');
         const positionalViewBtn = document.getElementById('positionalViewBtn');
         const depthChartViewBtn = document.getElementById('depthChartViewBtn');
+        const analyzeBtn = document.getElementById('analyzeBtn');
         const viewControls = document.getElementById('view-controls');
         const positionalFiltersContainer = document.getElementById('positional-filters');
         const tradeSimulator = document.getElementById('tradeSimulator');
@@ -32,6 +33,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const dropdownMenu = document.getElementById('dropdown-menu');
         const menuRosters = document.getElementById('menu-rosters');
         const menuOwnership = document.getElementById('menu-ownership');
+        const menuAnalyzer = document.getElementById('menu-analyzer');
 
         menuButton?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -63,6 +65,15 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
             } else {
                 handleFetchOwnership();
             }
+            dropdownMenu.classList.add('hidden');
+        });
+
+        menuAnalyzer?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const leagueId = leagueSelect?.value;
+            if (!username || !leagueId) return;
+            const base = pageType === 'welcome' ? '../' : '../../';
+            window.location.href = `${base}GEM_LG-IG.html?username=${encodeURIComponent(username)}&leagueId=${encodeURIComponent(leagueId)}`;
             dropdownMenu.classList.add('hidden');
         });
 
@@ -129,6 +140,12 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         positionalViewBtn?.addEventListener('click', () => setRosterView('positional'));
         depthChartViewBtn?.addEventListener('click', () => setRosterView('depth'));
         positionalFiltersContainer?.addEventListener('click', handlePositionFilter);
+        analyzeBtn?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const leagueId = leagueSelect?.value;
+            if (!username || !leagueId) return;
+            window.location.href = `../../GEM_LG-IG.html?username=${encodeURIComponent(username)}&leagueId=${encodeURIComponent(leagueId)}`;
+        });
         
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', async () => {
