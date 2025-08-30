@@ -154,15 +154,15 @@
             <p class="text-md text-gray-400">KTC Team Value Analysis</p>
         </header>
 
-        <!-- Controls -->
-        <div class="glass-panel py-1 px-2 flex flex-col md:flex-row items-center justify-center gap-1">
-            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="px-3 py-1 text-sm w-full md:w-auto">
-            <div id="leagueSelectWrapper" class="hidden w-full md:w-auto">
+        <!-- Controls hidden, values provided via query params -->
+        <div class="glass-panel py-1 px-2 flex flex-col md:flex-row items-center justify-center gap-1 hidden">
+            <input type="text" id="usernameInput" class="px-3 py-1 text-sm w-full md:w-auto">
+            <div id="leagueSelectWrapper" class="w-full md:w-auto">
                 <select id="leagueSelect" class="px-3 py-1 text-sm w-full md:w-auto appearance-none">
                     <option>Select a league...</option>
                 </select>
             </div>
-            <button id="fetchDataButton" class="bg-purple-600/50 hover:bg-purple-700/50 text-white font-bold text-sm py-1 px-3 w-full md:w-auto">Analyze League</button>
+            <button id="fetchDataButton" class="bg-purple-600/50 text-white font-bold text-sm py-1 px-3 w-full md:w-auto">Analyze League</button>
         </div>
         
         <!-- Summary Stats -->
@@ -251,14 +251,14 @@
 
 
             // --- Event Listeners ---
-            fetchDataButton.addEventListener('click', handleFetchData);
+            fetchDataButton.addEventListener('click', () => handleFetchData());
             leagueSelect.addEventListener('change', () => {
                 if (leagueSelect.value) {
                     analyzeLeague(leagueSelect.value);
                 }
             });
 
-            async function handleFetchData() {
+            async function handleFetchData(preselectedLeagueId = null) {
                 const username = usernameInput.value.trim();
                 if (!username) {
                     alert('Please enter a Sleeper username.');
@@ -279,9 +279,13 @@
                     await fetchUserAndLeagues(username);
 
                     if (state.leagues.length > 0) {
-                        // Auto-select and analyze the first league
-                        leagueSelect.selectedIndex = 1;
-                        await analyzeLeague(state.leagues[0].league_id);
+                        let idx = 0;
+                        if (preselectedLeagueId) {
+                            const found = state.leagues.findIndex(l => l.league_id === preselectedLeagueId);
+                            if (found !== -1) idx = found;
+                        }
+                        leagueSelect.selectedIndex = idx + 1;
+                        await analyzeLeague(state.leagues[idx].league_id);
                     }
                 } catch (error) {
                     console.error('Error fetching data:', error);
@@ -880,6 +884,14 @@
                     fetchDataButton.disabled = false;
                     fetchDataButton.textContent = 'Analyze League';
                 }
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const presetUsername = params.get('username');
+            const presetLeague = params.get('league');
+            if (presetUsername) {
+                usernameInput.value = presetUsername;
+                handleFetchData(presetLeague);
             }
         });
     </script>

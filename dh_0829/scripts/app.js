@@ -21,6 +21,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const clearCompareButton = document.getElementById('clearCompareButton');
         const positionalViewBtn = document.getElementById('positionalViewBtn');
         const depthChartViewBtn = document.getElementById('depthChartViewBtn');
+        const analyzeButton = document.getElementById('analyzeButton');
         const viewControls = document.getElementById('view-controls');
         const positionalFiltersContainer = document.getElementById('positional-filters');
         const tradeSimulator = document.getElementById('tradeSimulator');
@@ -32,6 +33,7 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
         const dropdownMenu = document.getElementById('dropdown-menu');
         const menuRosters = document.getElementById('menu-rosters');
         const menuOwnership = document.getElementById('menu-ownership');
+        const menuAnalyzer = document.getElementById('menu-analyzer');
 
         menuButton?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -63,6 +65,15 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
             } else {
                 handleFetchOwnership();
             }
+            dropdownMenu.classList.add('hidden');
+        });
+
+        menuAnalyzer?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const leagueId = leagueSelect?.value;
+            if (!username || !leagueId) return;
+            const base = pageType === 'welcome' ? 'analyzer/analyzer.html' : '../analyzer/analyzer.html';
+            window.location.href = `${base}?username=${encodeURIComponent(username)}&league=${leagueId}`;
             dropdownMenu.classList.add('hidden');
         });
 
@@ -117,6 +128,14 @@ function showLegend(){ try{ document.getElementById('legend-section')?.classList
                 window.location.href = `../rosters/rosters.html?username=${encodeURIComponent(username)}`;
             });
         }
+
+        analyzeButton?.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const leagueId = leagueSelect?.value;
+            if (!username || !leagueId) return;
+            const base = pageType === 'welcome' ? 'analyzer/analyzer.html' : '../analyzer/analyzer.html';
+            window.location.href = `${base}?username=${encodeURIComponent(username)}&league=${leagueId}`;
+        });
 
            leagueSelect?.addEventListener('change', (e) => {
           handleLeagueSelect(e);
